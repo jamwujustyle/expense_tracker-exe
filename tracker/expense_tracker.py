@@ -1,8 +1,10 @@
 import sys
 import datetime 
 import calendar 
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLineEdit, QLabel, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QLineEdit, QComboBox, QTableWidget, QTableWidgetItem, QMessageBox
 from expenses import Expense
+from file_handler import load_expenses_from_csv, save_expense_to_csv
+from database_handler import insert_expenses, load_expenses_from_db
 
 class ExpenseTrackerApp(QWidget):
     def __init__(self): 
@@ -11,13 +13,16 @@ class ExpenseTrackerApp(QWidget):
         self.setWindowTitle("expense tracker")
         self.setGeometry(200, 200, 800, 600)
         self.layout = QVBoxLayout()
+
         self.name_input = QLineEdit(self)
         self.name_input.setPlaceholderText("expense name: ")
         self.layout.addWidget(self.name_input)
-        
 
+        # Load expenses from CSV at startup
+        self.expenses = load_expenses_from_csv("expenses.csv")  
+        
         self.category_combobox = QComboBox(self)
-        self.category_combobox.addItems(['🍔 Food', '🏠 Home', '💼 Work', '🎉 Fun', '✨ Misc'])
+        self.category_combobox.addItems(['🍔food', '🏠home', '💼work', '🎉fun', '✨misc'])
         self.layout.addWidget(self.category_combobox)
 
         self.amount_input = QLineEdit(self)
@@ -30,12 +35,13 @@ class ExpenseTrackerApp(QWidget):
 
         self.table = QTableWidget(self)
         self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["id", "name", "category", 'amount'])
+        self.table.setHorizontalHeaderLabels(["id", "name", "category", "amount"])
         self.layout.addWidget(self.table)
 
         self.summary_button = QPushButton("show summary", self)
         self.summary_button.clicked.connect(self.show_summary)
         self.layout.addWidget(self.summary_button)
+
         self.name_input.setFixedHeight(40)
         self.name_input.setStyleSheet("font-size: 16px;")
         self.amount_input.setFixedHeight(40)
@@ -47,19 +53,25 @@ class ExpenseTrackerApp(QWidget):
         self.summary_button.setFixedHeight(40)
         self.summary_button.setStyleSheet("font-size: 16px;")
         self.table.setStyleSheet("font-size: 16px;")
+
         self.setLayout(self.layout)
-    
+
+        self.load_expenses()
+
     def add_expense(self):
         name = self.name_input.text()
         category = self.category_combobox.currentText()
         try:
             amount = float(self.amount_input.text())
         except ValueError:
-            self.show_error("invalid amount try again")
+            self.show_error("invalid amount try again.")
             return
 
         new_expense = Expense(name, category, amount)
         self.expenses.append(new_expense)
+
+        save_expense_to_csv(new_expense, "expenses.csv")
+        insert_expenses(new_expense)
 
         self.name_input.clear()
         self.amount_input.clear()
@@ -82,12 +94,13 @@ class ExpenseTrackerApp(QWidget):
         for expense in self.expenses:
             if expense.category in categories:
                 categories[expense.category] += expense.amount
-        else:
-            categories[expense.category] = expense.amount
+            else:
+                categories[expense.category] = expense.amount
 
         remaining_budget = 2000 - total_spent
+        
 
-        summary_message = 'expensees summary:\n\n'
+        summary_message = 'xxpense summary:\n\n'
         for category, amount in categories.items():
             summary_message += f"{category}: {amount:.2f}\n"
         summary_message += f"\ntotal spent: ${total_spent:.2f}\n"
@@ -99,14 +112,17 @@ class ExpenseTrackerApp(QWidget):
         daily_budget = remaining_budget / remaining_days if remaining_days > 0 else 0
 
         summary_message += f"\nremaining days: {remaining_days} days\n"
-        summary_message +=f"budget per day: {daily_budget:.2f}"
+        summary_message += f"budget per day: {daily_budget:.2f}"
+        if remaining_budget < 0:
+            summary_message = "YOU ARE OUT OF MONEY"
+            summary_message = f'<font color="red">{summary_message}</font>'
         QMessageBox.information(self, "summary", summary_message)
     
     def show_error(self, message):
         error_dialog = QMessageBox(self)
         error_dialog.setIcon(QMessageBox.Critical)
         error_dialog.setText(message)
-        error_dialog.setWindowTitle("error")
+        error_dialog.setWindowTitle("Error")
         error_dialog.exec_() 
 
 if __name__ == "__main__":
